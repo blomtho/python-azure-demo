@@ -25,7 +25,7 @@ if not db_password:
 # Byt ut DITT-SERVERNAMN mot ditt riktiga servernamn (t.ex. sql-thomas-quiz)
 server_name = "DITT-SERVERNAMN" # <--- OBS: Skriv in ditt servernamn här!
 
-connection_string = f"Driver={{ODBC Driver 18 for SQL Server}};Server=tcp:sql-thomas-quiz.database.windows.net,1433;Database=quizdb;Uid=dbadmin;Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+connection_string = f"Driver={{ODBC Driver 17 for SQL Server}};Server=tcp:sql-thomas-quiz.database.windows.net,1433;Database=quizdb;Uid=dbadmin;Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
 # URL-enkoda strängen för att hantera specialtecken
 quoted = urllib.parse.quote_plus(connection_string)
