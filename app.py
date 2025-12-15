@@ -7,20 +7,27 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 
+# ... importer ... (behåll dina imports)
+
 app = Flask(__name__)
 app.secret_key = "hemlig_nyckel_för_sessioner"
 
-# --- DATABAS KOPPLING ---
-# Klistra in din sträng från Azure (med DITT lösenord):
-connection_string = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:sql-thomas-quiz.database.windows.net,1433;Database=quizdb;Uid=dbadmin;Pwd=Azure-Quiz-Master-2025!;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+# --- HÄMTA LÖSENORD FRÅN MILJÖN (SÄKERT) ---
+db_password = os.environ.get("DB_PASSWORD")
 
-# --- HÄR ÄR FIXEN ---
-# Vi använder quote_plus för att göra strängen säker för URL:er
+if not db_password:
+    # Fallback för när du kör lokalt på Macen (OBS: Skriv inte lösenordet här om du ska pusha!)
+    # För att vara säker, sätt en environment variable lokalt, eller skriv in det tillfälligt 
+    # men kom ihåg att INTE pusha det.
+    print("Varning: Inget lösenord hittades i miljövariabler.")
+    db_password = "Nytt-Starkt-Lösenord-2025!" # <--- Bara för lokal test, ta bort innan push!
+
+# Bygg strängen dynamiskt
+connection_string = f"Driver={{ODBC Driver 18 for SQL Server}};Server=tcp:sql-thomas-quiz.database.windows.net,1433;Database=quizdb;Uid=dbadmin;Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+
+# URL-enkoda strängen
 quoted = urllib.parse.quote_plus(connection_string)
 app.config['SQLALCHEMY_DATABASE_URI'] = f"mssql+pyodbc:///?odbc_connect={quoted}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
 
 # --- DATABAS MODELLER (Tabeller) ---
 class Question(db.Model):
