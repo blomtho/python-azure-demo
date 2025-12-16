@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ladda upp - Quizlab</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+        h2 { color: #0078d4; margin-bottom: 20px; }
+        p { color: #666; font-size: 0.9em; margin-bottom: 30px; }
+        
+        /* Design för fil-inputen */
+        input[type="file"] {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border: 1px dashed #ccc;
+            width: 90%;
+        }
+
+        /* Samma knapp-design som startsidan */
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        button:hover { background-color: #005a9e; }
+        
+        .back-link { display: block; margin-top: 20px; color: #888; text-decoration: none; font-size: 0.9em; }
+        .back-link:hover { color: #333; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>📂 Ladda upp frågor</h2>
+        <p>Välj en CSV-fil med kolumnerna: <br><strong>Fråga</strong> och <strong>Svar</strong></p>
+        
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".csv" required>
+            <button type="submit">Ladda upp till Databasen 🚀</button>
+        </form>
+
+        <a href="/" class="back-link">← Tillbaka till startsidan</a>
+    </div>
+</body>
+</html>
