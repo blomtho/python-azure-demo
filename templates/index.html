@@ -3,21 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Min Azure App</title>
+    <title>Quizlab</title>
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
-        h1 { color: #0078d4; } /* Azure Blue */
-        p { color: #555; line-height: 1.5; }
-        .badge { background: #28a745; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8em; font-weight: bold; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+        h1 { color: #0078d4; margin-bottom: 10px; }
+        p { color: #555; line-height: 1.5; margin-bottom: 25px; }
+        .badge { background: #28a745; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8em; font-weight: bold; vertical-align: middle; }
+        
+        /* Design för knappen */
+        .btn {
+            display: inline-block;
+            background-color: #0078d4;
+            color: white;
+            text-decoration: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .btn:hover {
+            background-color: #005a9e; /* Mörkare blå vid hovring */
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>Hej Azure! ☁️</h1>
-        <p>Denna sida deployades automatiskt via <strong>GitHub Actions</strong>.</p>
-        <p><span class="badge">Status: Online</span></p>
-        <p>Kodad på en MacBook, körs i molnet.</p>
+        <h1>Quizlab 🧪</h1>
+        <p>Välkommen till din Azure-app.<br> <span class="badge">Status: Online</span></p>
+        
+        <a href="/upload" class="btn">Ladda upp CSV-fil 📂</a>
     </div>
 </body>
 </html>
