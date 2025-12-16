@@ -5,36 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quizlab</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+        body { font-family: -apple-system, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 100%; }
         h1 { color: #0078d4; margin-bottom: 10px; }
-        p { color: #555; line-height: 1.5; margin-bottom: 25px; }
-        .badge { background: #28a745; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8em; font-weight: bold; vertical-align: middle; }
+        h3 { color: #333; margin-top: 30px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+        p { color: #555; margin-bottom: 25px; }
+        .badge { background: #28a745; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8em; font-weight: bold; }
         
-        /* Design för knappen */
-        .btn {
-            display: inline-block;
-            background-color: #0078d4;
-            color: white;
-            text-decoration: none;
-            padding: 12px 25px;
-            border-radius: 8px;
-            font-weight: bold;
-            transition: background-color 0.2s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .btn:hover {
-            background-color: #005a9e; /* Mörkare blå vid hovring */
-            transform: translateY(-1px);
-        }
+        /* Lista med quiz */
+        ul { list-style: none; padding: 0; text-align: left; }
+        .quiz-item { background: #f8f9fa; border: 1px solid #e9ecef; padding: 15px; margin-bottom: 15px; border-radius: 8px; }
+        .quiz-title { font-weight: bold; font-size: 1.1em; color: #0078d4; display: block; margin-bottom: 10px; }
+        
+        /* Inputs och knappar */
+        input[type="text"] { width: 60%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        .btn { background-color: #0078d4; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+        .btn:hover { background-color: #005a9e; }
+        
+        /* Topplista */
+        .score-item { padding: 8px 0; border-bottom: 1px solid #f9f9f9; font-size: 0.9em; display: flex; justify-content: space-between; }
+        
+        /* Admin länk */
+        .admin-link { display: block; margin-top: 30px; color: #999; text-decoration: none; font-size: 0.9em; }
+        .admin-link:hover { color: #333; text-decoration: underline; }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>Quizlab 🧪</h1>
-        <p>Välkommen till din Azure-app.<br> <span class="badge">Status: Online</span></p>
-        
-        <a href="/upload" class="btn">Ladda upp CSV-fil 📂</a>
+        <p><span class="badge">Välj ett prov nedan</span></p>
+
+        {% if quizzes %}
+            <div style="text-align: left;">
+                {% for quiz in quizzes %}
+                    <div class="quiz-item">
+                        <span class="quiz-title">📝 {{ quiz.name }}</span>
+                        <form action="/start/{{ quiz.id }}" method="POST" style="display: flex; gap: 5px;">
+                            <input type="text" name="username" placeholder="Ditt namn..." required>
+                            <button type="submit" class="btn">Spela</button>
+                        </form>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="color: #888; font-style: italic;">Inga quiz finns uppladdade än.</p>
+        {% endif %}
+
+        {% if results %}
+            <h3>Topplista 🏆</h3>
+            <ul>
+                {% for r in results %}
+                    <li class="score-item">
+                        <span>🥇 <strong>{{ r.username }}</strong> <span style="color:#777; font-size:0.9em;">({{ r.quiz_name }})</span></span>
+                        <strong>{{ r.score }}/{{ r.total_questions }}</strong>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <a href="/upload" class="admin-link">⚙️ Admin: Skapa nytt Quiz</a>
     </div>
 </body>
 </html>
