@@ -17,7 +17,7 @@ if not db_password:
     print("VARNING: Inget lösenord (testläge)")
     db_password = "" 
 
-server_name = "DITT-SERVERNAMN" # <--- OBS: ÄNDRA TILL DITT NAMN IGEN OM DU RÅKAT SUDDA DET
+server_name = "sql-thomas-quiz" # <--- OBS: ÄNDRA TILL DITT NAMN IGEN OM DU RÅKAT SUDDA DET
 
 connection_string = f"Driver={{ODBC Driver 17 for SQL Server}};Server=tcp:{server_name}.database.windows.net,1433;Database=quizdb;Uid=dbadmin;Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
 
