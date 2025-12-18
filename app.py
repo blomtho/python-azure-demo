@@ -5,48 +5,31 @@ import urllib.parse
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
 
 app = Flask(__name__)
 app.secret_key = "hemlig_nyckel_för_sessioner"
 
-# --- 1. DATABAS KOPPLING ---
-
-# Hämta lösenordet från miljön (Environment Variable)
-db_password = os.environ.get("DB_PASSWORD")
-
-if not db_password:
-    # Fallback om du kör lokalt och inte satt variabeln
-    # OBS: Lämna tomt när du pushar till GitHub!
-    db_password = "" 
-
-# --- VIKTIGT: ÄNDRA DENNA RAD TILL DITT SERVERNAMN ---
-server_name = "sql-thomas-quiz"
-
-# Anslutningssträng (Anpassad för Azure Linux med ODBC Driver 17)
+# --- DB CONFIG ---
+db_password = os.environ.get("DB_PASSWORD", "")
+server_name = "sql-thomas-quiz" # <--- KONTROLLERA ATT DETTA ÄR RÄTT
 connection_string = f"Driver={{ODBC Driver 17 for SQL Server}};Server=tcp:{server_name}.database.windows.net,1433;Database=quizdb;Uid=dbadmin;Pwd={db_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
-
-# URL-enkoda strängen för att hantera specialtecken säkert
 quoted = urllib.parse.quote_plus(connection_string)
 app.config['SQLALCHEMY_DATABASE_URI'] = f"mssql+pyodbc:///?odbc_connect={quoted}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- 2. DATABAS MODELLER ---
-
+# --- MODELLER ---
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
-    # Relation: Ett quiz har många frågor
     questions = db.relationship('Question', backref='quiz', lazy=True, cascade="all, delete-orphan")
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     question_text = db.Column(db.String(500), nullable=False)
     answer_text = db.Column(db.String(200), nullable=False)
-    # Koppling: Varje fråga hör till ett Quiz ID
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
 
 class Result(db.Model):
@@ -57,222 +40,192 @@ class Result(db.Model):
     quiz_name = db.Column(db.String(100), nullable=False)
     date_taken = db.Column(db.DateTime, default=datetime.now)
 
-# Skapa tabellerna om de inte finns
 with app.app_context():
     db.create_all()
 
-# --- 3. LOGIK & ROUTES ---
+# --- ROUTES ---
 
 @app.route('/')
 def index():
-    # Startsidan: Visa topplista och tillgängliga quiz
     try:
         quizzes = Quiz.query.order_by(Quiz.created_at.desc()).all()
         recent_results = Result.query.order_by(Result.date_taken.desc()).limit(5).all()
         return render_template('index.html', quizzes=quizzes, results=recent_results)
-    except:
-        return render_template('index.html', quizzes=[], results=[])
+    except Exception as e:
+        return f"Databasfel: {e}"
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():
-    # Ladda upp CSV och skapa nytt Quiz
     if request.method == 'POST':
         quiz_name = request.form.get('quiz_name')
         file = request.files['file']
         
         if file and quiz_name:
             try:
-                # A. Skapa Quizet
+                # Läs filen
+                df = pd.read_csv(file)
+                # Normalisera kolumner (ta bort mellanslag, gemener)
+                df.columns = [c.lower().strip() for c in df.columns]
+                
+                # Försök hitta 'fråga' eller 'question'
+                q_col = next((c for c in df.columns if c in ['fråga', 'question', 'question_text']), None)
+                a_col = next((c for c in df.columns if c in ['svar', 'answer', 'answer_text']), None)
+
+                if not q_col or not a_col:
+                    flash(f"Fel: Hittade inte kolumnerna 'Fråga' och 'Svar'. Filen har: {list(df.columns)}", "error")
+                    return redirect(url_for('upload'))
+
+                # Skapa quiz
                 new_quiz = Quiz(name=quiz_name)
                 db.session.add(new_quiz)
-                db.session.flush() # Ger oss ID:t direkt
+                db.session.flush()
 
-                # B. Läs CSV och skapa frågor
-                df = pd.read_csv(file)
-                for index, row in df.iterrows():
-                    new_q = Question(
-                        question_text=str(row['Fråga']), 
-                        answer_text=str(row['Svar']),
-                        quiz_id=new_quiz.id
-                    )
-                    db.session.add(new_q)
+                count = 0
+                for _, row in df.iterrows():
+                    q_text = str(row[q_col]).strip()
+                    a_text = str(row[a_col]).strip()
+                    if q_text and a_text and q_text.lower() != 'nan':
+                        db.session.add(Question(question_text=q_text, answer_text=a_text, quiz_id=new_quiz.id))
+                        count += 1
                 
                 db.session.commit()
-                flash(f"Quizet '{quiz_name}' skapat!", "success")
+                
+                if count == 0:
+                    flash("Varning: Quizet skapades men innehöll 0 frågor.", "error")
+                else:
+                    flash(f"Succé! Quiz '{quiz_name}' med {count} frågor skapat!", "success")
+
             except Exception as e:
                 db.session.rollback()
-                flash(f"Fel vid uppladdning: {e}", "error")
+                flash(f"Krasch vid uppladdning: {e}", "error")
             return redirect(url_for('index'))
             
     return render_template('upload.html')
 
 @app.route('/start/<int:quiz_id>', methods=['POST'])
 def start_quiz(quiz_id):
-    # Starta spelet: Initiera kö-systemet
-    quiz = Quiz.query.get_or_404(quiz_id)
-    
-    # Hämta ALLA frågors ID för detta quiz
+    quiz = db.session.get(Quiz, quiz_id)
+    if not quiz:
+        return redirect(url_for('index'))
+        
     questions = Question.query.filter_by(quiz_id=quiz.id).all()
+    
+    # SKYDD MOT BLANK SIDA:
     if not questions:
-        flash("Detta quiz har inga frågor än.", "error")
+        flash(f"Quizet '{quiz.name}' är tomt! Ladda upp det igen.", "error")
         return redirect(url_for('index'))
 
     question_ids = [q.id for q in questions]
-    random.shuffle(question_ids) # Blanda ordningen
+    random.shuffle(question_ids)
 
-    # Spara spel-data i sessionen
     session['username'] = request.form['username']
     session['current_quiz_id'] = quiz.id
     session['current_quiz_name'] = quiz.name
-    
-    # INITIERA KÖERNA
-    session['queue'] = question_ids       # Huvudkön
-    session['retry_queue'] = []           # Returkön (felaktiga svar)
-    session['phase'] = 'main'             # Vi börjar i huvudfasen
-    session['history'] = []               # Facit
+    session['queue'] = question_ids
+    session['retry_queue'] = []
+    session['phase'] = 'main'
+    session['history'] = []
     session['score'] = 0
     session['total_questions'] = len(question_ids)
-    session.pop('saved', None)            # Rensa eventuell spar-flagga
 
     return redirect(url_for('quiz'))
 
 @app.route('/quiz', methods=['GET', 'POST'])
 def quiz():
-    try:
-        # Säkerhetskoll: Har vi startat ett quiz?
-        if 'current_quiz_id' not in session:
-            return redirect(url_for('index'))
+    if 'current_quiz_id' not in session:
+        return redirect(url_for('index'))
 
-        # --- HANTERA SVAR (POST) ---
-        if request.method == 'POST':
-            user_answer = request.form.get('answer', '').strip()
-            correct_answer = request.form.get('correct_answer', '').strip()
-            question_text = request.form.get('question_text', '')
-            
-            # Hämta ID säkert
-            q_id_str = request.form.get('question_id')
-            question_id = int(q_id_str) if q_id_str else None
-            
-            is_correct = user_answer.lower() == correct_answer.lower()
+    if request.method == 'POST':
+        # Ta emot svar
+        user_ans = request.form.get('answer', '').strip()
+        corr_ans = request.form.get('correct_answer', '').strip()
+        q_text = request.form.get('question_text', '')
+        q_id = request.form.get('question_id')
+        try:
+            q_id = int(q_id) if q_id else None
+        except:
+            q_id = None
 
-            if session.get('phase') == 'main':
-                if is_correct:
-                    # Öka poäng säkert
-                    session['score'] = session.get('score', 0) + 1
-                else:
-                    retry_list = session.get('retry_queue', [])
-                    if question_id and question_id not in retry_list:
-                        retry_list.append(question_id)
-                    session['retry_queue'] = retry_list
-
-            # Spara historik
-            history = session.get('history', [])
-            history.append({
-                'question': question_text,
-                'user_answer': user_answer,
-                'correct_answer': correct_answer,
-                'is_correct': is_correct,
-                'phase': session.get('phase')
-            })
-            session['history'] = history
-            
-            if is_correct:
-                flash("Rätt!", "success")
-            else:
-                flash(f"Fel. Rätt svar var: {correct_answer}", "error")
-                
-            return redirect(url_for('quiz'))
-
-        # --- HÄMTA NÄSTA FRÅGA (GET) ---
-        queue = session.get('queue', [])
-        retry_queue = session.get('retry_queue', [])
-        next_q_id = None
+        is_correct = user_ans.lower() == corr_ans.lower()
         
-        # Loopa för att hitta en giltig fråga
-        loop_limit = 0
-        while True:
-            loop_limit += 1
-            if loop_limit > 100:
-                return "<h1>Fel: Evig loop i kön.</h1><p>Kontakta admin.</p>"
-
-            if len(queue) > 0:
-                next_q_id = queue.pop(0)
-                session['queue'] = queue
-            
-            elif len(retry_queue) > 0:
-                if session.get('phase') == 'main':
-                    flash("Nu repeterar vi de frågor du missade! 🔄", "info")
-                    session['phase'] = 'retry'
-                    session['queue'] = retry_queue
-                    session['retry_queue'] = []
-                    # Starta om loopen
-                    queue = session['queue']
-                    retry_queue = []
-                    continue 
-                else:
-                    next_q_id = retry_queue.pop(0)
-                    session['retry_queue'] = retry_queue
-            
+        # Poäng & Retry logik
+        if session.get('phase') == 'main':
+            if is_correct:
+                session['score'] = session.get('score', 0) + 1
             else:
-                return redirect(url_for('show_result'))
+                retry_list = session.get('retry_queue', [])
+                if q_id and q_id not in retry_list:
+                    retry_list.append(q_id)
+                session['retry_queue'] = retry_list
 
-            if next_q_id is not None:
-                # --- HÄR KAN FELET VARA: HÄMTA FRÅGAN ---
-                # Använd db.session.get (nytt) eller Question.query.get (gammalt)
-                current_question = db.session.get(Question, next_q_id) 
-                
-                if current_question:
-                    return render_template('quiz.html', question=current_question, quiz_name=session.get('current_quiz_name'))
-                else:
-                    print(f"Varning: ID {next_q_id} saknas i DB.")
-                    continue
+        # Historik
+        hist = session.get('history', [])
+        hist.append({
+            'question': q_text, 'user_answer': user_ans, 
+            'correct_answer': corr_ans, 'is_correct': is_correct, 
+            'phase': session.get('phase')
+        })
+        session['history'] = hist
+        
+        flash("Rätt!" if is_correct else f"Fel. Rätt svar: {corr_ans}", "success" if is_correct else "error")
+        return redirect(url_for('quiz'))
+
+    # Hämta nästa fråga
+    queue = session.get('queue', [])
+    retry_queue = session.get('retry_queue', [])
+    next_id = None
+
+    # Loopa för att hantera "spök-IDn"
+    while True:
+        if queue:
+            next_id = queue.pop(0)
+            session['queue'] = queue
+        elif retry_queue:
+            if session.get('phase') == 'main':
+                flash("Repetition av missade frågor!", "info")
+                session['phase'] = 'retry'
+                session['queue'] = retry_queue
+                session['retry_queue'] = []
+                queue = session['queue']
+                retry_queue = []
+                continue
             else:
-                return redirect(url_for('show_result'))
+                next_id = retry_queue.pop(0)
+                session['retry_queue'] = retry_queue
+        else:
+            return redirect(url_for('show_result'))
 
-    except Exception as e:
-        # FÅNGA FELET OCH VISA DET PÅ SKÄRMEN
-        import traceback
-        return f"""
-        <h1>Ops! Något kraschade 💥</h1>
-        <p>Här är felmeddelandet (visa detta för utvecklaren):</p>
-        <pre style="background: #eee; padding: 20px; border: 1px solid #999;">{e}</pre>
-        <pre>{traceback.format_exc()}</pre>
-        """
+        if next_id:
+            current_q = db.session.get(Question, next_id)
+            if current_q:
+                return render_template('quiz.html', question=current_q, quiz_name=session.get('current_quiz_name'))
+            # Om ID saknas i DB, loopa vidare
+            continue
+        else:
+            return redirect(url_for('show_result'))
 
 @app.route('/result')
 def show_result():
-    # Visa facit och spara resultat
-    if 'history' not in session:
-        return redirect(url_for('index'))
-    
-    save_result_to_db()
-    
-    return render_template('result.html', 
-                           history=session['history'], 
-                           score=session['score'], 
-                           total=session['total_questions'])
+    if 'history' not in session: return redirect(url_for('index'))
+    save_result()
+    return render_template('result.html', history=session['history'], score=session['score'], total=session['total_questions'])
 
 @app.route('/finish')
 def finish():
-    # Manuell avslutning via länk
-    save_result_to_db()
+    save_result()
     return redirect(url_for('index'))
 
-def save_result_to_db():
-    # Hjälpfunktion för att spara resultat (en gång per spel)
+def save_result():
     try:
         if 'saved' not in session and 'username' in session:
-            res = Result(
-                username=session['username'], 
-                score=session.get('score', 0), 
+            db.session.add(Result(
+                username=session['username'], score=session.get('score', 0), 
                 total_questions=session.get('total_questions', 0),
-                quiz_name=session.get('current_quiz_name', 'Okänt')
-            )
-            db.session.add(res)
+                quiz_name=session.get('current_quiz_name', '?')
+            ))
             db.session.commit()
             session['saved'] = True
-    except Exception as e:
-        print(f"Kunde inte spara resultat: {e}")
+    except: pass
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
