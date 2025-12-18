@@ -138,96 +138,106 @@ def start_quiz(quiz_id):
 
 @app.route('/quiz', methods=['GET', 'POST'])
 def quiz():
-    if 'current_quiz_id' not in session:
-        return redirect(url_for('index'))
+    try:
+        # Säkerhetskoll: Har vi startat ett quiz?
+        if 'current_quiz_id' not in session:
+            return redirect(url_for('index'))
 
-    # --- HANTERA SVAR (POST) ---
-    if request.method == 'POST':
-        user_answer = request.form.get('answer', '').strip()
-        correct_answer = request.form.get('correct_answer', '').strip()
-        question_text = request.form.get('question_text', '')
-        
-        # Hämta ID säkert
-        q_id_str = request.form.get('question_id')
-        question_id = int(q_id_str) if q_id_str else None
-        
-        is_correct = user_answer.lower() == correct_answer.lower()
-
-        # Poängräkning (endast i huvudfasen)
-        if session.get('phase') == 'main':
-            if is_correct:
-                session['score'] = session.get('score', 0) + 1
-            else:
-                # Svara man fel i fas 1, lägg till i retry-kön
-                retry_list = session.get('retry_queue', [])
-                if question_id and question_id not in retry_list:
-                    retry_list.append(question_id)
-                session['retry_queue'] = retry_list
-
-        # Spara historik
-        history = session.get('history', [])
-        history.append({
-            'question': question_text,
-            'user_answer': user_answer,
-            'correct_answer': correct_answer,
-            'is_correct': is_correct,
-            'phase': session.get('phase')
-        })
-        session['history'] = history
-        
-        if is_correct:
-            flash("Rätt!", "success")
-        else:
-            flash(f"Fel. Rätt svar var: {correct_answer}", "error")
+        # --- HANTERA SVAR (POST) ---
+        if request.method == 'POST':
+            user_answer = request.form.get('answer', '').strip()
+            correct_answer = request.form.get('correct_answer', '').strip()
+            question_text = request.form.get('question_text', '')
             
-        return redirect(url_for('quiz'))
+            # Hämta ID säkert
+            q_id_str = request.form.get('question_id')
+            question_id = int(q_id_str) if q_id_str else None
+            
+            is_correct = user_answer.lower() == correct_answer.lower()
 
-    # --- HÄMTA NÄSTA FRÅGA (GET) ---
-    queue = session.get('queue', [])
-    retry_queue = session.get('retry_queue', [])
-    next_q_id = None
-    
-    # Loopa tills vi hittar en fråga som faktiskt finns i databasen (Självläkning)
-    while True:
-        # 1. Finns det frågor i huvud-kön?
-        if len(queue) > 0:
-            next_q_id = queue.pop(0)
-            session['queue'] = queue 
-        
-        # 2. Om huvud-kön är slut, men vi har retry-frågor
-        elif len(retry_queue) > 0:
             if session.get('phase') == 'main':
-                flash("Nu repeterar vi de frågor du missade! 🔄", "info")
-                session['phase'] = 'retry'
-                session['queue'] = retry_queue
-                session['retry_queue'] = [] 
-                # Starta om loopen för att hämta från den nya kön
-                queue = session['queue']
-                retry_queue = []
-                continue 
-            else:
-                next_q_id = retry_queue.pop(0)
-                session['retry_queue'] = retry_queue
+                if is_correct:
+                    # Öka poäng säkert
+                    session['score'] = session.get('score', 0) + 1
+                else:
+                    retry_list = session.get('retry_queue', [])
+                    if question_id and question_id not in retry_list:
+                        retry_list.append(question_id)
+                    session['retry_queue'] = retry_list
 
-        # 3. Allt är slut
-        else:
-            return redirect(url_for('show_result'))
-
-        # --- HÄR ÄR FIXEN: KONTROLLERA ATT FRÅGAN FINNS ---
-        if next_q_id is not None:
-            # Använd db.session.get (nyare syntax) och hantera om den saknas
-            current_question = db.session.get(Question, next_q_id)
+            # Spara historik
+            history = session.get('history', [])
+            history.append({
+                'question': question_text,
+                'user_answer': user_answer,
+                'correct_answer': correct_answer,
+                'is_correct': is_correct,
+                'phase': session.get('phase')
+            })
+            session['history'] = history
             
-            if current_question:
-                # BINGO! Vi hittade en fråga. Visa den.
-                return render_template('quiz.html', question=current_question, quiz_name=session.get('current_quiz_name'))
+            if is_correct:
+                flash("Rätt!", "success")
             else:
-                # Frågan fanns inte i DB (spök-ID). Loopen fortsätter och hämtar nästa.
-                print(f"Varning: Hoppar över ID {next_q_id} som saknas i DB.")
-                continue
-        else:
-            # Om next_q_id är None, bryt loopen och gå till resultat
-            return redirect(url_for('show_result'))
+                flash(f"Fel. Rätt svar var: {correct_answer}", "error")
+                
+            return redirect(url_for('quiz'))
+
+        # --- HÄMTA NÄSTA FRÅGA (GET) ---
+        queue = session.get('queue', [])
+        retry_queue = session.get('retry_queue', [])
+        next_q_id = None
+        
+        # Loopa för att hitta en giltig fråga
+        loop_limit = 0
+        while True:
+            loop_limit += 1
+            if loop_limit > 100:
+                return "<h1>Fel: Evig loop i kön.</h1><p>Kontakta admin.</p>"
+
+            if len(queue) > 0:
+                next_q_id = queue.pop(0)
+                session['queue'] = queue
+            
+            elif len(retry_queue) > 0:
+                if session.get('phase') == 'main':
+                    flash("Nu repeterar vi de frågor du missade! 🔄", "info")
+                    session['phase'] = 'retry'
+                    session['queue'] = retry_queue
+                    session['retry_queue'] = []
+                    # Starta om loopen
+                    queue = session['queue']
+                    retry_queue = []
+                    continue 
+                else:
+                    next_q_id = retry_queue.pop(0)
+                    session['retry_queue'] = retry_queue
+            
+            else:
+                return redirect(url_for('show_result'))
+
+            if next_q_id is not None:
+                # --- HÄR KAN FELET VARA: HÄMTA FRÅGAN ---
+                # Använd db.session.get (nytt) eller Question.query.get (gammalt)
+                current_question = db.session.get(Question, next_q_id) 
+                
+                if current_question:
+                    return render_template('quiz.html', question=current_question, quiz_name=session.get('current_quiz_name'))
+                else:
+                    print(f"Varning: ID {next_q_id} saknas i DB.")
+                    continue
+            else:
+                return redirect(url_for('show_result'))
+
+    except Exception as e:
+        # FÅNGA FELET OCH VISA DET PÅ SKÄRMEN
+        import traceback
+        return f"""
+        <h1>Ops! Något kraschade 💥</h1>
+        <p>Här är felmeddelandet (visa detta för utvecklaren):</p>
+        <pre style="background: #eee; padding: 20px; border: 1px solid #999;">{e}</pre>
+        <pre>{traceback.format_exc()}</pre>
+        """
 
 @app.route('/result')
 def show_result():
