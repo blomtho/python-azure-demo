@@ -2,48 +2,74 @@
 <html lang="sv">
 <head>
     <meta charset="UTF-8">
-    <title>Fråga - Quizlab</title>
+    <title>Spela - Quizlab</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: -apple-system, sans-serif; background-color: #0078d4; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; }
-        .card { background: white; color: #333; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; max-width: 500px; width: 90%; }
-        h2 { margin-bottom: 30px; font-size: 1.5em; }
-        p.category { color: #888; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #0078d4; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            padding: 20px;
+            color: white; 
+            box-sizing: border-box;
+        }
+        .card { 
+            background: white; 
+            color: #333; 
+            padding: 40px; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            text-align: center; 
+            max-width: 500px; 
+            width: 100%; 
+        }
         
-        input[type="text"] { width: 80%; padding: 15px; border: 2px solid #eee; border-radius: 10px; font-size: 1.1em; outline: none; transition: border 0.3s; }
+        /* Rubriker */
+        h2 { margin-bottom: 20px; font-size: 1.6em; color: #222; }
+        p.category { color: #888; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold; }
+        
+        /* Input fält */
+        input[type="text"] { 
+            width: 100%; 
+            padding: 15px; 
+            border: 2px solid #eee; 
+            border-radius: 8px; 
+            font-size: 1.1em; 
+            outline: none; 
+            transition: border 0.3s; 
+            box-sizing: border-box; /* Viktigt för att padding inte ska spräcka bredden */
+            margin-bottom: 20px;
+        }
         input[type="text"]:focus { border-color: #0078d4; }
         
-        button { background-color: #0078d4; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1.1em; margin-top: 20px; width: 100%; transition: background 0.2s; }
+        /* Knapp */
+        button { 
+            background-color: #0078d4; 
+            color: white; 
+            border: none; 
+            padding: 15px 30px; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 1.1em; 
+            width: 100%; 
+            transition: background 0.2s; 
+        }
         button:hover { background-color: #005a9e; }
         
-        .flash { padding: 15px; margin-bottom: 20px; border-radius: 8px; font-weight: bold; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
+        /* Feedback rutor (Rätt/Fel) */
+        .flash { padding: 15px; margin-bottom: 25px; border-radius: 8px; font-weight: bold; font-size: 1em; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         
-        .quit-link { display: block; margin-top: 20px; color: #999; text-decoration: none; font-size: 0.9em; }
-        .quit-link:hover { color: #555; }
+        /* Länk */
+        .quit-link { display: block; margin-top: 25px; color: #999; text-decoration: none; font-size: 0.9em; }
+        .quit-link:hover { color: #555; text-decoration: underline; }
     </style>
 </head>
 <body>
-    <div class="card">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <p class="category">Quiz: {{ quiz_name }}</p>
-        <h2>{{ question.question_text }}</h2>
-
-        <form method="POST">
-            <input type="hidden" name="correct_answer" value="{{ question.answer_text }}">
-            <input type="text" name="answer" placeholder="Ditt svar..." required autocomplete="off" autofocus>
-            <button type="submit">Svara</button>
-        </form>
-        
-        <a href="/finish" class="quit-link">Avsluta och spara poäng</a>
-    </div>
-</body>
-</html>
+    <div class
