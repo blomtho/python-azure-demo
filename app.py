@@ -244,5 +244,25 @@ def save_result():
             session['saved'] = True
     except: pass
 
+@app.route('/debug')
+def debug_page():
+    # Testa databas-koppling
+    status = "Databas: Okänd"
+    try:
+        # Försök hämta antal quiz
+        cnt = Quiz.query.count()
+        status = f"Databas: ANSLUTEN! Hittade {cnt} st quiz."
+    except Exception as e:
+        status = f"Databas: FEL - {str(e)}"
+
+    return f"""
+    <h1>Debug-sida 🛠️</h1>
+    <p>Appen körs!</p>
+    <p><strong>Servernamn:</strong> {server_name}</p>
+    <p><strong>Status:</strong> {status}</p>
+    <hr>
+    <a href="/">Tillbaka till start</a>
+    """
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
