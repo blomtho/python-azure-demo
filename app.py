@@ -130,93 +130,52 @@ def start_quiz(quiz_id):
 
 @app.route('/quiz', methods=['GET', 'POST'])
 def quiz():
-    # HÄR ÄR DEN NYA FELSÖKNINGS-BLOCKEN
+    # 1. Kolla om vi har en session
+    if 'current_quiz_id' not in session:
+        return "<h1>Status: Ingen session.</h1><p>Du har blivit utloggad. <a href='/'>Gå till start</a></p>"
+
+    # 2. Hämta kö-listan
+    queue = session.get('queue', [])
+    retry_queue = session.get('retry_queue', [])
+    current_quiz_name = session.get('current_quiz_name', 'Okänt namn')
+    
+    # 3. Debug-utskrift (Detta är vad du kommer se på skärmen)
+    info = f"""
+    <h1>🔍 Spel-diagnos</h1>
+    <p><strong>Quiz:</strong> {current_quiz_name}</p>
+    <p><strong>Frågor kvar i kön:</strong> {len(queue)} st</p>
+    <p><strong>Frågor i retry-kön:</strong> {len(retry_queue)} st</p>
+    <p><strong>Nuvarande fas:</strong> {session.get('phase')}</p>
+    <hr>
+    """
+
+    if not queue and not retry_queue:
+        return info + "<h2>Slutsats: Slut på frågor!</h2> <p>Borde skicka till resultat.</p>"
+
+    # 4. Tjuvkika på nästa fråga
+    next_id = queue[0] if queue else retry_queue[0]
+    
     try:
-        if 'current_quiz_id' not in session:
-            return redirect(url_for('index'))
-
-        if request.method == 'POST':
-            user_ans = request.form.get('answer', '').strip()
-            corr_ans = request.form.get('correct_answer', '').strip()
-            q_text = request.form.get('question_text', '')
-            q_id = request.form.get('question_id')
-            try:
-                q_id = int(q_id) if q_id else None
-            except:
-                q_id = None
-
-            is_correct = user_ans.lower() == corr_ans.lower()
-            
-            if session.get('phase') == 'main':
-                if is_correct:
-                    session['score'] = session.get('score', 0) + 1
-                else:
-                    retry_list = session.get('retry_queue', [])
-                    if q_id and q_id not in retry_list:
-                        retry_list.append(q_id)
-                    session['retry_queue'] = retry_list
-
-            hist = session.get('history', [])
-            hist.append({
-                'question': q_text, 'user_answer': user_ans, 
-                'correct_answer': corr_ans, 'is_correct': is_correct, 
-                'phase': session.get('phase')
-            })
-            session['history'] = hist
-            
-            flash("Rätt!" if is_correct else f"Fel. Rätt svar: {corr_ans}", "success" if is_correct else "error")
-            return redirect(url_for('quiz'))
-
-        # GET REQUEST - Hämta fråga
-        queue = session.get('queue', [])
-        retry_queue = session.get('retry_queue', [])
-        next_id = None
-
-        while True:
-            if queue:
-                next_id = queue.pop(0)
-                session['queue'] = queue
-            elif retry_queue:
-                if session.get('phase') == 'main':
-                    flash("Repetition av missade frågor!", "info")
-                    session['phase'] = 'retry'
-                    session['queue'] = retry_queue
-                    session['retry_queue'] = []
-                    queue = session['queue']
-                    retry_queue = []
-                    continue
-                else:
-                    next_id = retry_queue.pop(0)
-                    session['retry_queue'] = retry_queue
-            else:
-                return redirect(url_for('show_result'))
-
-            if next_id:
-                # Använd db.session.get för säkerhet
-                current_q = db.session.get(Question, next_id)
-                if current_q:
-                    return render_template('quiz.html', question=current_q, quiz_name=session.get('current_quiz_name'))
-                else:
-                    # ID fanns i listan men inte i DB -> loopa vidare
-                    continue
-            else:
-                return redirect(url_for('show_result'))
-
+        # Försök hämta frågan från DB
+        question = db.session.get(Question, next_id)
+        
+        if question:
+            return info + f"""
+            <h2>✅ Nästa fråga hittad!</h2>
+            <p><strong>ID:</strong> {question.id}</p>
+            <p><strong>Fråga:</strong> {question.question_text}</p>
+            <p><strong>Svar:</strong> {question.answer_text}</p>
+            <hr>
+            <p>Om du ser detta fungerar databasen, men 'quiz.html' kanske krånglar.</p>
+            """
+        else:
+            return info + f"""
+            <h2 style='color:red'>❌ VARNING: Spök-ID</h2>
+            <p>Appen försöker hämta fråga med ID <strong>{next_id}</strong>, men den finns inte i databasen!</p>
+            <p>Detta orsakar den blanka sidan.</p>
+            """
     except Exception as e:
-        # FÅNGA FELET OCH SKRIV UT DET
-        return f"""
-        <div style="padding: 20px; font-family: sans-serif;">
-            <h1 style="color: red;">Ops! Något kraschade 💥</h1>
-            <p>Ta en skärmdump på detta och visa:</p>
-            <div style="background: #f0f0f0; padding: 15px; border-radius: 5px; border: 1px solid #ccc;">
-                <strong>Felmeddelande:</strong> {str(e)} <br><br>
-                <strong>Detaljer:</strong> <br>
-                <pre>{traceback.format_exc()}</pre>
-            </div>
-            <br>
-            <a href="/">Tillbaka till start</a>
-        </div>
-        """
+        return info + f"<h2 style='color:red'>💥 KRASCH: {str(e)}</h2>"
 
 @app.route('/result')
 def show_result():
@@ -229,7 +188,7 @@ def show_result():
 
 @app.route('/finish')
 def finish():
-    save_result()
+    save_result(show_result)
     return redirect(url_for('index'))
 
 def save_result():
@@ -242,24 +201,28 @@ def save_result():
             ))
             db.session.commit()
             session['saved'] = True
-    except: pass
+    except: pass ChildProcessError
 
 @app.route('/debug')
 def debug_page():
-    # Testa databas-koppling
     status = "Databas: Okänd"
+    q_count = 0
+    quiz_count = 0
     try:
-        # Försök hämta antal quiz
-        cnt = Quiz.query.count()
-        status = f"Databas: ANSLUTEN! Hittade {cnt} st quiz."
+        quiz_count = db.session.query(Quiz).count()
+        q_count = db.session.query(Question).count()
+        status = f"✅ ANSLUTEN!"
     except Exception as e:
-        status = f"Databas: FEL - {str(e)}"
+        status = f"❌ FEL: {str(e)}"
 
     return f"""
-    <h1>Debug-sida 🛠️</h1>
-    <p>Appen körs!</p>
-    <p><strong>Servernamn:</strong> {server_name}</p>
+    <h1>Debug-rapport 🛠️</h1>
+    <p><strong>Server:</strong> {server_name}</p>
     <p><strong>Status:</strong> {status}</p>
+    <ul>
+        <li>Antal Quiz: <strong>{quiz_count}</strong></li>
+        <li>Antal Frågor totalt: <strong>{q_count}</strong> (Om detta är 0 funkar inte spelet!)</li>
+    </ul>
     <hr>
     <a href="/">Tillbaka till start</a>
     """
